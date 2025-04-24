@@ -1,15 +1,39 @@
 {
     "name": "shopify-bulk-tool-graphql",
     "version": "1.0.0",
+    "description": "Run Shopify GraphQL bulk operations easily, wait for completion, and get results.",
     "main": "index.js",
     "type": "module",
+    "files": [
+        "index.js",
+        "bulkOperation.js",
+        "client.js",
+        "constants.js",
+        "utils.js",
+        "README.md",
+        "LICENSE"
+    ],
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/FabianGenell/shopify-bulk-tool-graphql.git"
+    },
     "keywords": [
         "shopify",
         "graphql",
         "bulk",
-        "tool"
+        "api",
+        "tool",
+        "node"
     ],
     "author": "Fabian Genell",
     "license": "ISC",
-    "description": "Bulk tool for Shopify GraphQL API"
+    "bugs": {
+        "url": "https://github.com/FabianGenell/shopify-bulk-tool-graphql/issues"
+    },
+    "homepage": "https://github.com/FabianGenell/shopify-bulk-tool-graphql#readme",
+    "dependencies": {},
+    "devDependencies": {}
 }
