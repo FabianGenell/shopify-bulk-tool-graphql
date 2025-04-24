@@ -1,0 +1,15 @@
+{
+    "name": "shopify-bulk-tool-graphql",
+    "version": "1.0.0",
+    "main": "index.js",
+    "type": "module",
+    "keywords": [
+        "shopify",
+        "graphql",
+        "bulk",
+        "tool"
+    ],
+    "author": "Fabian Genell",
+    "license": "ISC",
+    "description": "Bulk tool for Shopify GraphQL API"
+}
