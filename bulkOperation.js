@@ -50,12 +50,22 @@ const startBulkOperation = async (shop, accessToken, operationBody, isMutation) 
 
 /**
  * Polls the status of an ongoing bulk operation.
+ * Retries briefly if the operation is not found initially.
  * @param {string} shop
  * @param {string} accessToken
  * @param {string} operationId - The ID of the bulk operation (e.g., 'gid://shopify/BulkOperation/12345').
+ * @param {number} [maxPollNotFoundRetries=3] - Max retries if operation not found.
+ * @param {number} [pollNotFoundDelayMs=1000] - Delay between retries if not found.
  * @returns {Promise<object>} The current bulkOperation status object.
+ * @throws {Error} If the operation cannot be found after retries.
  */
-const pollBulkOperationStatus = async (shop, accessToken, operationId) => {
+const pollBulkOperationStatus = async (
+    shop,
+    accessToken,
+    operationId,
+    maxPollNotFoundRetries = 3,
+    pollNotFoundDelayMs = 1000
+) => {
     const query = `
         query CurrentBulkOperation($id: ID!) {
             currentBulkOperation(id: $id) {
@@ -72,25 +82,40 @@ const pollBulkOperationStatus = async (shop, accessToken, operationId) => {
         }
     `;
     const variables = { id: operationId };
-    const data = await makeShopifyRequest(shop, accessToken, query, variables);
 
-    if (!data.currentBulkOperation) {
-        // This might happen if the ID is wrong or very shortly after creation
-        console.warn(
-            `Polling returned no data for operation ID: ${operationId}. Retrying might be needed.`
-        );
-        // Returning a synthetic 'CREATED' status to potentially allow retry logic
-        return { id: operationId, status: 'CREATED', errorCode: null, url: null };
-        // Alternatively, throw an error:
-        // throw new Error(`Could not find currentBulkOperation for ID: ${operationId}`);
+    for (let attempt = 1; attempt <= maxPollNotFoundRetries + 1; attempt++) {
+        const data = await makeShopifyRequest(shop, accessToken, query, variables);
+
+        if (data.currentBulkOperation) {
+            return data.currentBulkOperation;
+        }
+
+        // Operation not found, log and potentially retry
+        if (attempt <= maxPollNotFoundRetries) {
+            console.warn(
+                `Polling attempt ${attempt}/${
+                    maxPollNotFoundRetries + 1
+                } returned no data for operation ID: ${operationId}. Retrying in ${pollNotFoundDelayMs}ms...`
+            );
+            await delay(pollNotFoundDelayMs);
+        } else {
+            // All retries failed
+            console.error(
+                `Could not find currentBulkOperation for ID: ${operationId} after ${attempt} attempts.`
+            );
+            throw new Error(
+                `Could not find currentBulkOperation for ID: ${operationId} after ${attempt} attempts.`
+            );
+        }
     }
-    return data.currentBulkOperation;
+    // Should be unreachable due to the loop logic and throw inside
+    throw new Error(`Unexpected state in pollBulkOperationStatus for ID: ${operationId}`);
 };
 
 /**
- * Downloads the content from the results URL.
+ * Downloads the content stream from the results URL.
  * @param {string} url - The URL provided by Shopify for the results.
- * @returns {Promise<string>} The raw content (JSONL string).
+ * @returns {Promise<import('stream').Readable>} The readable stream of the response body.
  * @throws {Error} If the download fails.
  */
 const downloadResults = async (url) => {
@@ -99,9 +124,11 @@ const downloadResults = async (url) => {
         if (!response.ok) {
             throw new Error(`Failed to download results: ${response.status} ${response.statusText}`);
         }
-        // Check content type? Should be application/jsonl or similar
-        // console.log('Result Content-Type:', response.headers.get('content-type'));
-        return await response.text();
+        if (!response.body) {
+            throw new Error('Response body is null, cannot download results.');
+        }
+        console.log(`Result Content-Type: ${response.headers.get('content-type')}`); // Keep for debugging
+        return response.body;
     } catch (error) {
         console.error(`Error downloading results from ${url}:`, error);
         throw error;
@@ -152,10 +179,11 @@ export const executeBulkOperation = async (
             }
 
             console.log(`Downloading results from ${operation.url}...`);
-            const jsonlData = await downloadResults(operation.url);
-            console.log(`Downloaded ${jsonlData.length} bytes.`);
+            const resultStream = await downloadResults(operation.url);
+            // Note: Cannot easily log stream size here without consuming it.
 
-            const results = parseJsonl(jsonlData);
+            console.log(`Parsing results stream...`);
+            const results = await parseJsonl(resultStream);
             console.log(`Parsed ${results.length} objects.`);
 
             if (filePath) {
